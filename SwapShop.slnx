@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SwapShop.Core/SwapShop.Core.csproj" />
+    <Project Path="src/SwapShop.Data/SwapShop.Data.csproj" />
+    <Project Path="src/SwapShop.Web/SwapShop.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SwapShop.Tests/SwapShop.Tests.csproj" />
+  </Folder>
+</Solution>
