@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SwapShop.Web.Components;
 using SwapShop.Web.Components.Account;
 using SwapShop.Data;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +40,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
+builder.Services.AddMudServices();
 var app = builder.Build();
 using(var scope = app.Services.CreateScope())
 {
