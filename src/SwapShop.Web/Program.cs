@@ -40,6 +40,13 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 var app = builder.Build();
+using(var scope = app.Services.CreateScope())
+{
+    var seedEmail = app.Configuration["SeedManager:Email"] ?? throw new InvalidOperationException("SeedManager:Email is not configured.");
+    var seedPassword = app.Configuration["SeedManager:Password"] ?? throw new InvalidOperationException("SeedManager: Password is not configured.");
+
+    await DbSeeder.SeedAsync(scope.ServiceProvider, seedEmail, seedPassword);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

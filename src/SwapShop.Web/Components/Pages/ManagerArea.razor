@@ -1,0 +1,11 @@
+@page "/manager"
+
+@using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Constants
+
+@attribute [Authorize(Roles = Roles.Manager)]
+
+<PageTitle>Manager Area</PageTitle>
+
+<h1>Manager Area</h1>
+<p>Only Manager can see this page.</p>
