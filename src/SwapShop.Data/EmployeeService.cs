@@ -122,7 +122,13 @@ public class EmployeeService(UserManager<ApplicationUser> userManager) : IEmploy
         }
 
         user.IsActive = isActive;
-        return FormIdentity(await userManager.UpdateAsync(user));
+        var result = await userManager.UpdateAsync(user);
+
+        if (result.Succeeded && !isActive)
+        {
+            await userManager.UpdateSecurityStampAsync(user);
+        }
+        return FormIdentity(result);
     }
 
     private static ServiceResult FormIdentity(IdentityResult result) =>

@@ -4,10 +4,14 @@
 @using SwapShop.Core.Models
 @using SwapShop.Core.Services
 @using SwapShop.Web.Components.Dialogs
+@using System.Security.Claims
 @attribute [Authorize(Roles = Roles.Manager)]
 
 @inject IEmployeeService EmployeeService
 @inject IDialogService DialogService
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
 
 <PageTitle>Employees</PageTitle>
 
@@ -38,9 +42,17 @@
             @(context.IsActive ? "Active" : "Inactive")
             </MudChip>
     </MudTd>
-    <MudTd>
-        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditAsync(context.Id)" />
-    </MudTd>
+            <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditAsync(context.Id)" />
+            @if (context.Id != currentUserId)
+            {
+                <MudIconButton Icon="@(context.IsActive ? Icons.Material.Filled.Block : Icons.Material.Filled.CheckCircle)"
+                               Color="@(context.IsActive ? Color.Error : Color.Success)"
+                               Size="Size.Small"
+                               title="@(context.IsActive ? "Deactivate" : "Reactivate")"
+                               OnClick="() => ToggleActiveAsync(context)" />
+            }
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         <MudText>No employees found.</MudText>
@@ -52,7 +64,15 @@
     private bool loading = true;
     private bool showInactive = true;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    private string? currentUserId;
+
+        protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        currentUserId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -86,6 +106,34 @@
         if(result is {Canceled: false})
         {
             await LoadAsync();
+        }
+    }
+
+        private async Task ToggleActiveAsync(EmployeeDto employee)
+    {
+        var activate = !employee.IsActive;
+        var verb = activate ? "Reactivate" : "Deactivate";
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            $"{verb} employee",
+            $"{verb} {employee.FullName}?",
+            yesText: verb,
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        var result = await EmployeeService.SetActiveAsync(employee.Id, activate);
+        if (result.Succeeded)
+        {
+            Snackbar.Add($"{employee.FullName} {(activate ? "reactivated" : "deactivated")}.", Severity.Success);
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(string.Join(" ", result.Errors), Severity.Error);
         }
     }
 }
