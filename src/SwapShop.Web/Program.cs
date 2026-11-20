@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SwapShop.Web.Components;
 using SwapShop.Web.Components.Account;
+using SwapShop.Core.Services;
 using SwapShop.Data;
 using MudBlazor.Services;
 
@@ -39,7 +40,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
-
+builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddMudServices();
 var app = builder.Build();
 using(var scope = app.Services.CreateScope())
