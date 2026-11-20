@@ -1,0 +1,168 @@
+@using Position = SwapShop.Core.Enums.Position
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+
+@inject IShiftService ShiftService
+@inject IEmployeeService EmployeeService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<EditForm Model="Model" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+    <MudDialog>
+        <DialogContent>
+            <MudStack Spacing="2">
+                @foreach (var error in errors)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@error</MudAlert>
+                }
+
+                <MudDatePicker Label="Date" @bind-Date="DateValue" />
+
+                <MudStack Row="true" Spacing="2">
+                    <MudTimePicker Label="Start" @bind-Time="StartValue" />
+                    <MudTimePicker Label="End" @bind-Time="EndValue" />
+                </MudStack>
+                <MudText Typo="Typo.caption">If the end is earlier than the start, the shift ends the next day.</MudText>
+
+                <MudSelect T="Position" @bind-Value="Model.Position" Label="Position">
+                    @foreach (var position in Enum.GetValues<Position>())
+                    {
+                        <MudSelectItem Value="@position">@position</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudSelect T="string" @bind-Value="AssignedValue" Label="Assigned to">
+                    <MudSelectItem T="string" Value="@string.Empty">Open shift (unassigned)</MudSelectItem>
+                    @foreach (var employee in employees)
+                    {
+                        <MudSelectItem T="string" Value="@employee.Id">@employee.FullName</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudTextField @bind-Value="Model.Notes" For="@(() => Model.Notes)" Label="Notes" Lines="2" />
+            </MudStack>
+        </DialogContent>
+        <DialogActions>
+            @if (!IsNew)
+            {
+                <MudButton Color="Color.Error" OnClick="DeleteAsync" Disabled="busy">Delete</MudButton>
+                <MudSpacer />
+            }
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="busy">Save</MudButton>
+        </DialogActions>
+    </MudDialog>
+</EditForm>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public ShiftFormModel Model { get; set; } = new();
+
+    private IReadOnlyList<EmployeeDto> employees = [];
+    private List<string> errors = [];
+    private bool busy;
+
+    private bool IsNew => Model.Id is null;
+
+    private DateTime? DateValue
+    {
+        get => Model.Date.ToDateTime(TimeOnly.MinValue);
+        set
+        {
+            if (value.HasValue)
+            {
+                Model.Date = DateOnly.FromDateTime(value.Value);
+            }
+        }
+    }
+
+    private TimeSpan? StartValue
+    {
+        get => Model.StartTime.ToTimeSpan();
+        set
+        {
+            if (value.HasValue)
+            {
+                Model.StartTime = TimeOnly.FromTimeSpan(value.Value);
+            }
+        }
+    }
+
+    private TimeSpan? EndValue
+    {
+        get => Model.EndTime.ToTimeSpan();
+        set
+        {
+            if (value.HasValue)
+            {
+                Model.EndTime = TimeOnly.FromTimeSpan(value.Value);
+            }
+        }
+    }
+
+    private string AssignedValue
+    {
+        get => Model.AssignedUserId ?? string.Empty;
+        set => Model.AssignedUserId = string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        employees = await EmployeeService.GetAllAsync(includeInactive: false);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        busy = true;
+        errors = [];
+
+        var result = await ShiftService.SaveAsync(Model);
+
+        busy = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add(IsNew ? "Shift added." : "Shift updated.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            errors = result.Errors.ToList();
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete shift",
+            "Delete this shift? This cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        busy = true;
+        var result = await ShiftService.DeleteAsync(Model.Id!.Value);
+        busy = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add("Shift deleted.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            errors = result.Errors.ToList();
+        }
+    }
+}

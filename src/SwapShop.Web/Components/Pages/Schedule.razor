@@ -1,0 +1,112 @@
+@page "/manager/schedule"
+
+@using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+@using SwapShop.Core.Utilities
+@using SwapShop.Web.Components.Dialogs
+
+@attribute [Authorize(Roles = Roles.Manager)]
+
+@inject IShiftService ShiftService
+@inject IDialogService DialogService
+
+<PageTitle>Schedule</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Schedule</MudText>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="() => ChangeWeekAsync(-7)" />
+    <MudText Typo="Typo.h6">@weekStart.ToString("MMM d") – @weekStart.AddDays(6).ToString("MMM d, yyyy")</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="() => ChangeWeekAsync(7)" />
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="AddAsync">Add shift</MudButton>
+</MudStack>
+
+<MudTable Items="shifts" Loading="loading" Hover="true" Striped="true" Dense="true">
+    <HeaderContent>
+        <MudTh>Date</MudTh>
+        <MudTh>Time</MudTh>
+        <MudTh>Position</MudTh>
+        <MudTh>Assigned to</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Date">@context.Date.ToString("ddd, MMM d")</MudTd>
+        <MudTd DataLabel="Time">@context.StartTime.ToString("HH:mm") – @context.EndTime.ToString("HH:mm")</MudTd>
+        <MudTd DataLabel="Position">@context.Position</MudTd>
+        <MudTd DataLabel="Assigned to">
+            @if (context.IsOpen)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning">Open</MudChip>
+            }
+            else
+            {
+                @context.AssignedUserName
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small"
+                     Color="@(context.IsPublished ? Color.Success : Color.Default)">
+                @(context.IsPublished ? "Published" : "Draft")
+            </MudChip>
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                           OnClick="() => EditAsync(context.Id)" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No shifts this week.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+    private IReadOnlyList<ShiftDto> shifts = [];
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        shifts = await ShiftService.GetWeekAsync(weekStart);
+        loading = false;
+    }
+
+    private async Task ChangeWeekAsync(int days)
+    {
+        weekStart = weekStart.AddDays(days);
+        await LoadAsync();
+    }
+
+    private Task AddAsync() => OpenDialogAsync("Add shift", new ShiftFormModel { Date = weekStart });
+
+    private async Task EditAsync(int id)
+    {
+        var model = await ShiftService.GetForEditAsync(id);
+        if (model is null)
+        {
+            return;
+        }
+
+        await OpenDialogAsync("Edit shift", model);
+    }
+
+    private async Task OpenDialogAsync(string title, ShiftFormModel model)
+    {
+        var parameters = new DialogParameters<ShiftDialog> { { x => x.Model, model } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<ShiftDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadAsync();
+        }
+    }
+}
