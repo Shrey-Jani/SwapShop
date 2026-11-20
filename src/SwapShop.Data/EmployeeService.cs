@@ -60,6 +60,11 @@ public class EmployeeService(UserManager<ApplicationUser> userManager) : IEmploy
             IsActive = true
         };
 
+                if (string.IsNullOrWhiteSpace(model.Password))
+        {
+            return ServiceResult.Failure("A temporary password is required for a new employee.");
+        }
+
         var created = await userManager.CreateAsync(user, model.Password);
         if (!created.Succeeded)
         {

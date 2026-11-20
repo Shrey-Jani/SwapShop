@@ -16,4 +16,7 @@ public class ShiftFormModel
     public Position Position {get; set;}
 
     public string? AssignedUserId {get; set;}
+
+        [StringLength(500)]
+    public string? Notes { get; set; }
 }
