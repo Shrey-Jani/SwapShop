@@ -13,6 +13,8 @@
 @inject IEmployeeService EmployeeService
 @inject IDialogService DialogService
 
+@inject ISnackbar Snackbar
+
 <PageTitle>Schedule</PageTitle>
 
 <MudText Typo="Typo.h4" GutterBottom="true">Schedule</MudText>
@@ -27,7 +29,21 @@
     <MudSpacer />
     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                StartIcon="@Icons.Material.Filled.Add" OnClick="() => AddAsync(weekStart, null, null)">Add shift</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Success" Class="mr-2"
+            StartIcon="@Icons.Material.Filled.Publish"
+            Disabled="@(loading || DraftCount == 0)"
+            OnClick="PublishWeekAsync">
+            Publish week@(DraftCount > 0 ? $" ({DraftCount})" : "")
+    </MudButton>
 </MudStack>
+
+@if (DraftCount > 0)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+        @DraftCount draft shift(s) this week are hidden from staff until you publish the week.
+        Outlined chips are drafts, solid green chips are published.
+    </MudAlert>
+}
 
 @if (loading)
 {
@@ -69,6 +85,8 @@
 
 @code {
     private record GridRow(string Id, string Name, Position? Position);
+
+    private int DraftCount => shifts.Count(s => !s.IsPublished);
 
     private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
     private IReadOnlyList<ShiftDto> shifts = [];
@@ -170,5 +188,25 @@
         {
             await LoadAsync();
         }
+    }
+
+        private async Task PublishWeekAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Publish week",
+            $"Publish {DraftCount} draft shift(s) for {weekStart:MMM d} – {weekStart.AddDays(6):MMM d}? Staff will be able to see them.",
+            yesText: "Publish",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        loading = true;
+        var published = await ShiftService.PublishWeekAsync(weekStart);
+
+        Snackbar.Add($"Published {published} shift(s).", Severity.Success);
+        await LoadAsync();
     }
 }
