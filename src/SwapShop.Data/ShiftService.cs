@@ -7,7 +7,7 @@ namespace SwapShop.Data;
 
 public class ShiftService(IDbContextFactory<ApplicationDbContext> dbFactory) : IShiftService
 {
-    public async Task<IReadOnlyList<ShiftDto>> GetWeekAsync(DateOnly weekStart)
+        public async Task<IReadOnlyList<ShiftDto>> GetWeekAsync(DateOnly weekStart)
     {
         var weekEnd = weekStart.AddDays(6);
 
@@ -20,6 +20,29 @@ public class ShiftService(IDbContextFactory<ApplicationDbContext> dbFactory) : I
             .ThenBy(s => s.StartTime)
             .ToListAsync();
 
+        return await ToDtosAsync(db, shifts);
+    }
+
+    public async Task<IReadOnlyList<ShiftDto>> GetForUserAsync(string userId, DateOnly weekStart)
+    {
+        var weekEnd = weekStart.AddDays(6);
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+
+        var shifts = await db.Shifts
+            .AsNoTracking()
+            .Where(s => s.AssignedUserId == userId
+                        && s.IsPublished
+                        && s.Date >= weekStart && s.Date <= weekEnd)
+            .OrderBy(s => s.Date)
+            .ThenBy(s => s.StartTime)
+            .ToListAsync();
+
+        return await ToDtosAsync(db, shifts);
+    }
+
+    private static async Task<IReadOnlyList<ShiftDto>> ToDtosAsync(ApplicationDbContext db, List<Shift> shifts)
+    {
         var userIds = shifts
             .Where(s => s.AssignedUserId is not null)
             .Select(s => s.AssignedUserId!)

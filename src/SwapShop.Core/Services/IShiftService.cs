@@ -9,4 +9,6 @@ public interface IShiftService
     Task<ServiceResult> SaveAsync(ShiftFormModel model);
     Task<ServiceResult> DeleteAsync(int id);
     Task<int> PublishWeekAsync(DateOnly weekStart);
+
+        Task<IReadOnlyList<ShiftDto>> GetForUserAsync(string userId, DateOnly weekStart);
 }

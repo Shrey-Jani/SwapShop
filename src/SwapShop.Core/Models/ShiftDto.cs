@@ -15,4 +15,6 @@ public record ShiftDto(
 )
 {
     public bool IsOpen => AssignedUserId == null; 
+
+    public TimeSpan Duration => EndTime - StartTime;
 }
