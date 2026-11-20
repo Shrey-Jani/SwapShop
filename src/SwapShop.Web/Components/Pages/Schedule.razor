@@ -1,5 +1,6 @@
 @page "/manager/schedule"
 
+@using Position = SwapShop.Core.Enums.Position
 @using Microsoft.AspNetCore.Authorization
 @using SwapShop.Core.Models
 @using SwapShop.Core.Services
@@ -9,6 +10,7 @@
 @attribute [Authorize(Roles = Roles.Manager)]
 
 @inject IShiftService ShiftService
+@inject IEmployeeService EmployeeService
 @inject IDialogService DialogService
 
 <PageTitle>Schedule</PageTitle>
@@ -16,64 +18,87 @@
 <MudText Typo="Typo.h4" GutterBottom="true">Schedule</MudText>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
-    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="() => ChangeWeekAsync(-7)" />
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="loading"
+                   OnClick="() => ChangeWeekAsync(-7)" />
     <MudText Typo="Typo.h6">@weekStart.ToString("MMM d") – @weekStart.AddDays(6).ToString("MMM d, yyyy")</MudText>
-    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="() => ChangeWeekAsync(7)" />
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="loading"
+                   OnClick="() => ChangeWeekAsync(7)" />
+    <MudButton Variant="Variant.Text" Disabled="loading" OnClick="GoToThisWeekAsync">This week</MudButton>
     <MudSpacer />
     <MudButton Variant="Variant.Filled" Color="Color.Primary"
-               StartIcon="@Icons.Material.Filled.Add" OnClick="AddAsync">Add shift</MudButton>
+               StartIcon="@Icons.Material.Filled.Add" OnClick="() => AddAsync(weekStart, null, null)">Add shift</MudButton>
 </MudStack>
 
-<MudTable Items="shifts" Loading="loading" Hover="true" Striped="true" Dense="true">
-    <HeaderContent>
-        <MudTh>Date</MudTh>
-        <MudTh>Time</MudTh>
-        <MudTh>Position</MudTh>
-        <MudTh>Assigned to</MudTh>
-        <MudTh>Status</MudTh>
-        <MudTh></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Date">@context.Date.ToString("ddd, MMM d")</MudTd>
-        <MudTd DataLabel="Time">@context.StartTime.ToString("HH:mm") – @context.EndTime.ToString("HH:mm")</MudTd>
-        <MudTd DataLabel="Position">@context.Position</MudTd>
-        <MudTd DataLabel="Assigned to">
-            @if (context.IsOpen)
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Class="mb-2" />
+}
+
+<div style="overflow-x: auto;">
+    <MudSimpleTable Dense="true" Bordered="true">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                @foreach (var day in Days)
+                {
+                    <th>@day.ToString("ddd d")</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in rows)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning">Open</MudChip>
+                <tr>
+                    <td><strong>@row.Name</strong></td>
+                    @foreach (var day in Days)
+                    {
+                        <td>@Cell(row.Id, day, row.Position)</td>
+                    }
+                </tr>
             }
-            else
-            {
-                @context.AssignedUserName
-            }
-        </MudTd>
-        <MudTd DataLabel="Status">
-            <MudChip T="string" Size="Size.Small"
-                     Color="@(context.IsPublished ? Color.Success : Color.Default)">
-                @(context.IsPublished ? "Published" : "Draft")
-            </MudChip>
-        </MudTd>
-        <MudTd>
-            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                           OnClick="() => EditAsync(context.Id)" />
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No shifts this week.</MudText>
-    </NoRecordsContent>
-</MudTable>
+            <tr>
+                <td><strong>Open shifts</strong></td>
+                @foreach (var day in Days)
+                {
+                    <td>@Cell(null, day, null)</td>
+                }
+            </tr>
+        </tbody>
+    </MudSimpleTable>
+</div>
 
 @code {
+    private record GridRow(string Id, string Name, Position? Position);
+
     private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
     private IReadOnlyList<ShiftDto> shifts = [];
+    private List<GridRow> rows = [];
     private bool loading = true;
+
+    private IEnumerable<DateOnly> Days => Enumerable.Range(0, 7).Select(i => weekStart.AddDays(i));
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
         loading = true;
+
+        var employees = await EmployeeService.GetAllAsync(includeInactive: false);
         shifts = await ShiftService.GetWeekAsync(weekStart);
+
+        rows = employees
+            .Select(e => new GridRow(e.Id, e.FullName, e.Position))
+            .ToList();
+
+        var missing = shifts
+            .Where(s => s.AssignedUserId is not null && rows.All(r => r.Id != s.AssignedUserId))
+            .DistinctBy(s => s.AssignedUserId);
+
+        foreach (var shift in missing)
+        {
+            rows.Add(new GridRow(shift.AssignedUserId!, $"{shift.AssignedUserName} (inactive)", null));
+        }
+
         loading = false;
     }
 
@@ -83,7 +108,44 @@
         await LoadAsync();
     }
 
-    private Task AddAsync() => OpenDialogAsync("Add shift", new ShiftFormModel { Date = weekStart });
+    private async Task GoToThisWeekAsync()
+    {
+        weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+        await LoadAsync();
+    }
+
+    private IEnumerable<ShiftDto> ShiftsFor(string? userId, DateOnly day) =>
+        shifts.Where(s => s.AssignedUserId == userId && s.Date == day);
+
+    private RenderFragment Cell(string? userId, DateOnly day, Position? position) => @<div>
+        @foreach (var shift in ShiftsFor(userId, day))
+        {
+            <MudChip T="string" Size="Size.Small"
+                     Variant="@(shift.IsPublished ? Variant.Filled : Variant.Outlined)"
+                     Color="@(shift.IsPublished ? Color.Success : Color.Default)"
+                     title="@shift.Position"
+                     OnClick="() => EditAsync(shift.Id)">
+                @shift.StartTime.ToString("HH:mm")–@shift.EndTime.ToString("HH:mm")
+                @if (userId is null)
+                {
+                    <text> · @shift.Position</text>
+                }
+            </MudChip>
+        }
+        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                       OnClick="() => AddAsync(day, userId, position)" />
+    </div>;
+
+    private Task AddAsync(DateOnly day, string? userId, Position? position)
+    {
+        var model = new ShiftFormModel { Date = day, AssignedUserId = userId };
+        if (position is not null)
+        {
+            model.Position = position.Value;
+        }
+
+        return OpenDialogAsync("Add shift", model);
+    }
 
     private async Task EditAsync(int id)
     {
