@@ -3,16 +3,19 @@
 @using Microsoft.AspNetCore.Authorization
 @using SwapShop.Core.Models
 @using SwapShop.Core.Services
-
+@using SwapShop.Web.Components.Dialogs
 @attribute [Authorize(Roles = Roles.Manager)]
 
 @inject IEmployeeService EmployeeService
+@inject IDialogService DialogService
 
 <PageTitle>Employees</PageTitle>
 
 <MudText Typo="Typo.h4" GutterBottom="true">Employees</MudText>
 
 <MudSwitch T="bool" @bind-Value="showInactive" @bind-Value:after="LoadAsync" Color="Color.Primary" Label="Show inactive" />
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddAsync" Class="mb-2">Add Employee</MudButton>
 
 <MudTable Items = "employees" Loading="loading" Hover="true" Striped="true" Dense="true">
     <HeaderContent>
@@ -21,6 +24,7 @@
         <MudTh>Position</MudTh>
         <MudTh>Hourly rate</MudTh>
         <MudTh>Status</MudTh>
+        <MudTh></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name">@context.FullName</MudTd>
@@ -33,6 +37,9 @@
             Color="@(context.IsActive ? Color.Success : Color.Default)">
             @(context.IsActive ? "Active" : "Inactive")
             </MudChip>
+    </MudTd>
+    <MudTd>
+        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditAsync(context.Id)" />
     </MudTd>
     </RowTemplate>
     <NoRecordsContent>
@@ -52,5 +59,33 @@
         loading = true;
         employees = await EmployeeService.GetAllAsync(showInactive);
         loading = false;
+    }
+
+    private Task AddAsync() => OpenDialogAsync("Add Employee", new EmployeeFormModel());
+
+    private async Task EditAsync(string id)
+    {
+        var model = await EmployeeService.GetForEditAsync(id);    
+        if (model is null)
+        {
+            return;
+        }
+        await OpenDialogAsync("Edit Employee", model);
+    } 
+    private async Task OpenDialogAsync(string title, EmployeeFormModel model)
+    {
+        var parameters = new DialogParameters<EmployeeDialog>
+        {
+            {x => x.Model, model}
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true};
+
+        var dialog = await DialogService.ShowAsync<EmployeeDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if(result is {Canceled: false})
+        {
+            await LoadAsync();
+        }
     }
 }

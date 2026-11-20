@@ -1,0 +1,79 @@
+@using Position = SwapShop.Core.Enums.Position
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+
+@inject IEmployeeService EmployeeService
+@inject ISnackbar Snackbar
+
+<EditForm Model="Model" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+    <MudDialog>
+        <DialogContent>
+            <MudStack Spacing="2">
+                @foreach (var error in errors)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">
+                        @error
+                    </MudAlert>
+                }
+                <MudTextField @bind-Value="Model.FirstName" For="@(() => Model.FirstName)" Label="First Name" />
+                <MudTextField @bind-Value="Model.LastName" For="@(() => Model.LastName)" Label="Last Name" />
+                <MudTextField @bind-Value="Model.Email" For="@(() => Model.Email)" Label="Email" InputType="InputType.Email" />
+                <MudSelect T="Position" @bind-Value="Model.Position" For="@(() => Model.Position)" Label="Position">
+    @foreach (var position in Enum.GetValues<Position>())
+    {
+        <MudSelectItem Value="@position">@position</MudSelectItem>
+    }
+</MudSelect>
+
+                <MudNumericField @bind-Value="Model.HourlyRate" For="@(() => Model.HourlyRate)" Label="Hourly rate" />
+
+                @if (IsNew)
+                {
+                    <MudTextField @bind-Value="Model.Password" Label="Temporary password" InputType="InputType.Password" HelperText="At least 8 characters, with upper and lower case, a digit and a symbol." />
+                }
+            </MudStack>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="saving">Save</MudButton>
+        </DialogActions>
+    </MudDialog>
+</EditForm>
+
+@code{
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog {get; set;} = default!;
+
+    [Parameter]
+    public EmployeeFormModel Model {get; set;} = new();
+
+    private List<string> errors = [];
+    private bool saving;
+
+    private bool IsNew => Model.Id is null;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        errors = [];
+
+        var result = IsNew 
+            ? await EmployeeService.CreateAsync(Model)
+            : await EmployeeService.UpdateAsync(Model);
+
+        saving = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add(IsNew ? "Employee Added" : "Employee Updated.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            errors = result.Errors.ToList();
+        }
+    }
+}
