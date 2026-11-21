@@ -38,12 +38,24 @@ public static class TimeOffRules
         DateOnly leaveEnd,
         DateTime now)
     {
-        var leaveFrom = leaveStart.ToDateTime(TimeOnly.MinValue);
-        var leaveTo = leaveEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
         var horizon = now.AddHours(24);
 
         return shifts.Any(s =>
-            s.Start < leaveTo && s.End > leaveFrom
+            OverlapsLeave(s, leaveStart, leaveEnd)
             && s.Start <= horizon && s.End > now);
+    }
+
+    public static int CountAffectedShifts(
+        IEnumerable<ShiftSpan> shifts,
+        DateOnly leaveStart,
+        DateOnly leaveEnd) =>
+        shifts.Count(s => OverlapsLeave(s, leaveStart, leaveEnd));
+
+    private static bool OverlapsLeave(ShiftSpan shift, DateOnly leaveStart, DateOnly leaveEnd)
+    {
+        var leaveFrom = leaveStart.ToDateTime(TimeOnly.MinValue);
+        var leaveTo = leaveEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
+
+        return shift.Start < leaveTo && shift.End > leaveFrom;
     }
 }

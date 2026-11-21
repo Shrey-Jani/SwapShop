@@ -17,4 +17,6 @@ public record ShiftDto(
     public bool IsOpen => AssignedUserId == null; 
 
     public TimeSpan Duration => EndTime - StartTime;
+
+    public ShiftSpan Span => ShiftSpan.From(Date, StartTime, EndTime);
 }

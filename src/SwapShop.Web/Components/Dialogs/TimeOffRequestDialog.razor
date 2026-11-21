@@ -1,0 +1,95 @@
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+
+@inject ITimeOffService TimeOffService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1"><strong>@ShiftText</strong></MudText>
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                If this shift starts within the next 24 hours, your request is marked Short notice and shown as
+                urgent to your manager. Please also contact your manager directly.
+            </MudAlert>
+
+            @foreach (var error in errors)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@error</MudAlert>
+            }
+
+            <MudStack Row="true" Spacing="2">
+                <MudDatePicker Label="First day off" Date="firstDay" Disabled="true" />
+                <MudDatePicker Label="Last day off" @bind-Date="lastDay" MinDate="firstDay" />
+            </MudStack>
+
+            <MudTextField @bind-Value="reason" Label="Reason (optional)" Lines="2" MaxLength="500" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="saving"
+                   OnClick="SubmitAsync">Send request</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public ShiftDto Shift { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string UserId { get; set; } = string.Empty;
+
+    private DateTime? firstDay;
+    private DateTime? lastDay;
+    private string? reason;
+    private List<string> errors = [];
+    private bool saving;
+
+    private string ShiftText =>
+        $"{Shift.Date:dddd, MMM d} · {Shift.StartTime:HH:mm} to {Shift.EndTime:HH:mm} · {Shift.Position}";
+
+    protected override void OnInitialized()
+    {
+        firstDay = Shift.Date.ToDateTime(TimeOnly.MinValue);
+        lastDay = firstDay;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SubmitAsync()
+    {
+        errors = [];
+
+        if (lastDay is null)
+        {
+            errors = ["Please choose the last day off."];
+            return;
+        }
+
+        var model = new TimeOffFormModel
+        {
+            StartDate = Shift.Date,
+            EndDate = DateOnly.FromDateTime(lastDay.Value),
+            Reason = reason
+        };
+
+        saving = true;
+        var result = await TimeOffService.RequestAsync(UserId, model);
+        saving = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add("Time-off request sent.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            errors = result.Errors.ToList();
+        }
+    }
+}

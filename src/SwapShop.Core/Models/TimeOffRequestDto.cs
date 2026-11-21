@@ -12,7 +12,8 @@ public record TimeOffRequestDto(
     TimeOffStatus Status,
     bool IsShortNotice,
     DateTime RequestedAtUtc,
-    DateTime? ReviewedAtUtc)
+    DateTime? ReviewedAtUtc,
+    int AffectedShiftCount = 0)
 {
     public int Days => EndDate.DayNumber - StartDate.DayNumber + 1;
 }

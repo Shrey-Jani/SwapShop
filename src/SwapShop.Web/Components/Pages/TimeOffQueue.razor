@@ -1,0 +1,185 @@
+@page "/manager/time-off"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Enums
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+
+@attribute [Authorize(Roles = Roles.Manager)]
+
+@inject ITimeOffService TimeOffService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Time-off requests</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudText Typo="Typo.h4">Time-off requests</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
+               Disabled="loading || processing" OnClick="LoadAsync">Refresh</MudButton>
+</MudStack>
+
+<MudTabs Elevation="0" Rounded="true" TabPanelsClass="pt-4">
+    <MudTabPanel Text="@($"Pending ({pending.Count})")">
+        <MudTable Items="pending" Loading="loading" Hover="true" Striped="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Employee</MudTh>
+                <MudTh>Dates</MudTh>
+                <MudTh>Days</MudTh>
+                <MudTh>Reason</MudTh>
+                <MudTh>Flags</MudTh>
+                <MudTh>Requested</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Employee"><strong>@context.EmployeeName</strong></MudTd>
+                <MudTd DataLabel="Dates">@DatesText(context)</MudTd>
+                <MudTd DataLabel="Days">@context.Days</MudTd>
+                <MudTd DataLabel="Reason">@context.Reason</MudTd>
+                <MudTd DataLabel="Flags">
+                    @if (context.IsShortNotice)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Urgent: short notice</MudChip>
+                    }
+                    @if (context.AffectedShiftCount > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">
+                            @context.AffectedShiftCount shift(s) affected
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Requested">@context.RequestedAtUtc.ToLocalTime().ToString("MMM d, HH:mm")</MudTd>
+                <MudTd>
+                    <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Filled"
+                               Disabled="processing" OnClick="() => ReviewAsync(context, true)">Approve</MudButton>
+                    <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                               Disabled="processing" OnClick="() => ReviewAsync(context, false)">Deny</MudButton>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No pending requests.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="History">
+        <MudTable Items="history" Loading="loading" Hover="true" Striped="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Employee</MudTh>
+                <MudTh>Dates</MudTh>
+                <MudTh>Days</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Reviewed</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Employee"><strong>@context.EmployeeName</strong></MudTd>
+                <MudTd DataLabel="Dates">@DatesText(context)</MudTd>
+                <MudTd DataLabel="Days">@context.Days</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
+                    @if (context.IsShortNotice)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">
+                            Short notice
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Reviewed">
+                    @(context.ReviewedAtUtc is null ? "-" : context.ReviewedAtUtc.Value.ToLocalTime().ToString("MMM d, HH:mm"))
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No reviewed requests yet.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private string? managerId;
+    private IReadOnlyList<TimeOffRequestDto> pending = [];
+    private IReadOnlyList<TimeOffRequestDto> history = [];
+    private bool loading = true;
+    private bool processing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        managerId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        pending = await TimeOffService.GetPendingAsync();
+        history = await TimeOffService.GetHistoryAsync();
+        loading = false;
+    }
+
+    private async Task ReviewAsync(TimeOffRequestDto request, bool approve)
+    {
+        if (managerId is null)
+        {
+            return;
+        }
+
+        var verb = approve ? "Approve" : "Deny";
+        var message = $"{verb} {request.EmployeeName}'s time off for {DatesText(request)}?";
+
+        if (request.AffectedShiftCount > 0)
+        {
+            message += $" {request.AffectedShiftCount} scheduled shift(s) fall in this period. "
+                       + "They stay assigned until you change them.";
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            $"{verb} time off",
+            message,
+            yesText: verb,
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        processing = true;
+        var result = await TimeOffService.ReviewAsync(request.Id, managerId, approve);
+        processing = false;
+
+        if (!result.Succeeded)
+        {
+            Snackbar.Add(string.Join(" ", result.Errors), Severity.Error);
+        }
+        else if (approve && request.AffectedShiftCount > 0)
+        {
+            Snackbar.Add(
+                $"Approved. {request.AffectedShiftCount} shift(s) in this period still need reassigning.",
+                Severity.Warning);
+        }
+        else
+        {
+            Snackbar.Add(approve ? "Request approved." : "Request denied.", Severity.Success);
+        }
+
+        await LoadAsync();
+    }
+
+    private static string DatesText(TimeOffRequestDto request) =>
+        request.StartDate == request.EndDate
+            ? request.StartDate.ToString("MMM d, yyyy")
+            : $"{request.StartDate:MMM d, yyyy} – {request.EndDate:MMM d, yyyy}";
+
+    private static Color StatusColor(TimeOffStatus status) => status switch
+    {
+        TimeOffStatus.Pending => Color.Warning,
+        TimeOffStatus.Approved => Color.Success,
+        TimeOffStatus.Denied => Color.Error,
+        _ => Color.Default
+    };
+}

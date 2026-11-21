@@ -2,13 +2,17 @@
 
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Enums
 @using SwapShop.Core.Models
 @using SwapShop.Core.Services
 @using SwapShop.Core.Utilities
+@using SwapShop.Web.Components.Dialogs
 
 @attribute [Authorize]
 
 @inject IShiftService ShiftService
+@inject ITimeOffService TimeOffService
+@inject IDialogService DialogService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>My shifts</PageTitle>
@@ -35,6 +39,7 @@
         <MudTh>Position</MudTh>
         <MudTh>Hours</MudTh>
         <MudTh>Notes</MudTh>
+        <MudTh>Time off</MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Day">@context.Date.ToString("dddd, MMM d")</MudTd>
@@ -42,6 +47,23 @@
         <MudTd DataLabel="Position">@context.Position</MudTd>
         <MudTd DataLabel="Hours">@context.Duration.TotalHours.ToString("0.##")</MudTd>
         <MudTd DataLabel="Notes">@context.Notes</MudTd>
+        <MudTd DataLabel="Time off">
+            @{
+                var covering = CoveringRequest(context);
+            }
+            @if (covering is not null)
+            {
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(covering.Status == TimeOffStatus.Approved ? Color.Success : Color.Warning)">
+                    @(covering.Status == TimeOffStatus.Approved ? "Off approved" : "Off requested")
+                </MudChip>
+            }
+            else if (CanRequestOff(context))
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                           OnClick="() => RequestOffAsync(context)">Request off</MudButton>
+            }
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         <MudText>No published shifts for this week.</MudText>
@@ -52,6 +74,7 @@
     private string? userId;
     private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
     private IReadOnlyList<ShiftDto> shifts = [];
+    private IReadOnlyList<TimeOffRequestDto> timeOff = [];
     private bool loading = true;
 
     private double TotalHours => shifts.Sum(s => s.Duration.TotalHours);
@@ -74,6 +97,7 @@
 
         loading = true;
         shifts = await ShiftService.GetForUserAsync(userId, weekStart);
+        timeOff = await TimeOffService.GetForUserAsync(userId);
         loading = false;
     }
 
@@ -87,5 +111,36 @@
     {
         weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
         await LoadAsync();
+    }
+
+    private TimeOffRequestDto? CoveringRequest(ShiftDto shift) =>
+        timeOff.FirstOrDefault(r =>
+            (r.Status == TimeOffStatus.Pending || r.Status == TimeOffStatus.Approved)
+            && r.StartDate <= shift.Date
+            && shift.Date <= r.EndDate);
+
+    private static bool CanRequestOff(ShiftDto shift) => shift.Span.End > DateTime.Now;
+
+    private async Task RequestOffAsync(ShiftDto shift)
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters<TimeOffRequestDialog>
+        {
+            { x => x.Shift, shift },
+            { x => x.UserId, userId }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<TimeOffRequestDialog>("Request time off", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadAsync();
+        }
     }
 }
