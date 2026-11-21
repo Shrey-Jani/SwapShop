@@ -36,6 +36,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(
     ServiceLifetime.Scoped);
 
 builder.Services.AddScoped<IShiftService, ShiftService>();
+builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
