@@ -37,6 +37,8 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(
 
 builder.Services.AddScoped<IShiftService, ShiftService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {

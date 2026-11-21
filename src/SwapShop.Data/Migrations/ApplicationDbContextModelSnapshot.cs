@@ -241,6 +241,9 @@ namespace SwapShop.Data.Migrations
                     b.Property<DateOnly>("EndDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsShortNotice")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");

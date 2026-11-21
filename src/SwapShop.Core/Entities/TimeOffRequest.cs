@@ -10,6 +10,7 @@ public class TimeOffRequest
     public DateOnly EndDate { get; set; }
     public string? Reason { get; set; }
     public TimeOffStatus Status { get; set; } = TimeOffStatus.Pending;
+    public bool IsShortNotice { get; set; }
     public DateTime RequestedAtUtc { get; set; } = DateTime.UtcNow;
     public string? ReviewedByUserId { get; set; }
     public DateTime? ReviewedAtUtc { get; set; }

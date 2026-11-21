@@ -1,0 +1,202 @@
+@page "/my-time-off"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Enums
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+
+@attribute [Authorize]
+
+@inject ITimeOffService TimeOffService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>My time off</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">My time off</MudText>
+
+<MudPaper Class="pa-4 mb-4" Outlined="true">
+    <MudText Typo="Typo.h6" GutterBottom="true">Request time off</MudText>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+        A request that covers a shift starting within the next 24 hours is marked Short notice and shown as
+        urgent to your manager. Please also contact your manager directly.
+    </MudAlert>
+
+    <MudStack Spacing="2">
+        <MudStack Row="true" Spacing="2">
+            <MudDatePicker Label="First day off" @bind-Date="startDate" MinDate="@DateTime.Today" />
+            <MudDatePicker Label="Last day off" @bind-Date="endDate" MinDate="@(startDate ?? DateTime.Today)" />
+        </MudStack>
+
+        <MudTextField @bind-Value="reason" Label="Reason (optional)" Lines="2" MaxLength="500" />
+
+        @foreach (var error in errors)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true">@error</MudAlert>
+        }
+
+        <div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="saving"
+                       OnClick="SubmitAsync">Send request</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+
+<MudTable Items="requests" Loading="loading" Hover="true" Striped="true" Dense="true">
+    <HeaderContent>
+        <MudTh>Dates</MudTh>
+        <MudTh>Days</MudTh>
+        <MudTh>Reason</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Requested</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Dates">@DatesText(context)</MudTd>
+        <MudTd DataLabel="Days">@context.Days</MudTd>
+        <MudTd DataLabel="Reason">@context.Reason</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
+            @if (context.IsShortNotice)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">
+                    Short notice
+                </MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Requested">@context.RequestedAtUtc.ToLocalTime().ToString("MMM d, HH:mm")</MudTd>
+        <MudTd>
+            @if (context.Status == TimeOffStatus.Pending)
+            {
+                <MudButton Size="Size.Small" Color="Color.Error" Disabled="saving"
+                           OnClick="() => CancelAsync(context)">Cancel</MudButton>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>You have not requested any time off yet.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private string? userId;
+    private IReadOnlyList<TimeOffRequestDto> requests = [];
+    private List<string> errors = [];
+    private bool loading = true;
+    private bool saving;
+
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string? reason;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (userId is null)
+        {
+            loading = false;
+            return;
+        }
+
+        loading = true;
+        requests = await TimeOffService.GetForUserAsync(userId);
+        loading = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        errors = [];
+
+        if (startDate is null || endDate is null)
+        {
+            errors = ["Please choose the first and the last day off."];
+            return;
+        }
+
+        var model = new TimeOffFormModel
+        {
+            StartDate = DateOnly.FromDateTime(startDate.Value),
+            EndDate = DateOnly.FromDateTime(endDate.Value),
+            Reason = reason
+        };
+
+        saving = true;
+        var result = await TimeOffService.RequestAsync(userId, model);
+        saving = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add("Time-off request sent.", Severity.Success);
+            startDate = null;
+            endDate = null;
+            reason = null;
+            await LoadAsync();
+        }
+        else
+        {
+            errors = result.Errors.ToList();
+        }
+    }
+
+    private async Task CancelAsync(TimeOffRequestDto request)
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Cancel request",
+            $"Cancel your time-off request for {DatesText(request)}?",
+            yesText: "Cancel request",
+            cancelText: "Keep it");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        saving = true;
+        var result = await TimeOffService.CancelAsync(userId, request.Id);
+        saving = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add("Request cancelled.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(string.Join(" ", result.Errors), Severity.Error);
+        }
+
+        await LoadAsync();
+    }
+
+    private static string DatesText(TimeOffRequestDto request) =>
+        request.StartDate == request.EndDate
+            ? request.StartDate.ToString("MMM d, yyyy")
+            : $"{request.StartDate:MMM d, yyyy} – {request.EndDate:MMM d, yyyy}";
+
+    private static Color StatusColor(TimeOffStatus status) => status switch
+    {
+        TimeOffStatus.Pending => Color.Warning,
+        TimeOffStatus.Approved => Color.Success,
+        TimeOffStatus.Denied => Color.Error,
+        _ => Color.Default
+    };
+}
