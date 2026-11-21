@@ -166,6 +166,32 @@ namespace SwapShop.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SwapShop.Core.Entities.Availability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DayOfWeek");
+
+                    b.ToTable("Availabilities");
+                });
+
             modelBuilder.Entity("SwapShop.Core.Entities.Shift", b =>
                 {
                     b.Property<int>("Id")
@@ -201,6 +227,49 @@ namespace SwapShop.Data.Migrations
                     b.HasIndex("Date");
 
                     b.ToTable("Shifts");
+                });
+
+            modelBuilder.Entity("SwapShop.Core.Entities.TimeOffRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UserId", "StartDate", "EndDate");
+
+                    b.ToTable("TimeOffRequests");
                 });
 
             modelBuilder.Entity("SwapShop.Data.ApplicationUser", b =>
@@ -387,12 +456,35 @@ namespace SwapShop.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SwapShop.Core.Entities.Availability", b =>
+                {
+                    b.HasOne("SwapShop.Data.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SwapShop.Core.Entities.Shift", b =>
                 {
                     b.HasOne("SwapShop.Data.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("AssignedUserId")
                         .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("SwapShop.Core.Entities.TimeOffRequest", b =>
+                {
+                    b.HasOne("SwapShop.Data.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SwapShop.Data.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }
