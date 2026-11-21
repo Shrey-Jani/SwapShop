@@ -44,11 +44,6 @@ public static class TimeOffRules
         DateOnly leaveEnd) =>
         shifts.Count(s => OverlapsLeave(s, leaveStart, leaveEnd));
 
-    private static bool OverlapsLeave(ShiftSpan shift, DateOnly leaveStart, DateOnly leaveEnd)
-    {
-        var leaveFrom = leaveStart.ToDateTime(TimeOnly.MinValue);
-        var leaveTo = leaveEnd.AddDays(1).ToDateTime(TimeOnly.MinValue);
-
-        return shift.Start < leaveTo && shift.End > leaveFrom;
-    }
+    private static bool OverlapsLeave(ShiftSpan shift, DateOnly leaveStart, DateOnly leaveEnd) =>
+        shift.Overlaps(new DateRange(leaveStart, leaveEnd));
 }

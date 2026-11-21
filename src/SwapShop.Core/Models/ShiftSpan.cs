@@ -16,4 +16,12 @@ public record ShiftSpan(DateTime Start, DateTime End)
     }
 
     public bool Overlaps(ShiftSpan other) => Start < other.End && End > other.Start;
+
+    public bool Overlaps(DateRange leave)
+    {
+        var leaveFrom = leave.Start.ToDateTime(TimeOnly.MinValue);
+        var leaveTo = leave.End.AddDays(1).ToDateTime(TimeOnly.MinValue);
+
+        return Start < leaveTo && End > leaveFrom;
+    }
 }
