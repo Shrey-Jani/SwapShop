@@ -1,0 +1,248 @@
+@page "/my-availability"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Enums
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+@using SwapShop.Core.Utilities
+@using SwapShop.Web.Components.Scheduling
+
+@attribute [Authorize]
+
+@inject IAvailabilityService AvailabilityService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>My availability</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">My availability</MudText>
+
+<MudTabs Elevation="0" Rounded="true" TabPanelsClass="pt-4">
+    <MudTabPanel Text="Standing pattern">
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+            Your usual weekly availability. It applies to every week unless you set a custom version for a
+            specific week. Once you add a window, any day without one counts as unavailable. If you have not
+            set anything, managers will not see availability warnings for you. For "until the end of the day",
+            use 23:59.
+        </MudAlert>
+
+        <AvailabilityEditor Windows="standing" Disabled="saving" />
+
+        @foreach (var error in standingErrors)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@error</MudAlert>
+        }
+
+        <MudStack Row="true" Class="mt-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="saving"
+                       OnClick="SaveStandingAsync">Save</MudButton>
+            <MudButton Variant="Variant.Text" Disabled="saving" OnClick="LoadStandingAsync">Reset</MudButton>
+        </MudStack>
+    </MudTabPanel>
+
+    <MudTabPanel Text="A specific week">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="saving || weekLoading"
+                           OnClick="() => ChangeWeekAsync(-7)" />
+            <MudText Typo="Typo.h6">@weekStart.ToString("MMM d") – @weekStart.AddDays(6).ToString("MMM d, yyyy")</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="saving || weekLoading"
+                           OnClick="() => ChangeWeekAsync(7)" />
+            <MudButton Variant="Variant.Text" Disabled="saving || weekLoading"
+                       OnClick="GoToThisWeekAsync">This week</MudButton>
+            <MudSpacer />
+            <MudChip T="string" Size="Size.Small" Color="@SourceColor">@SourceText</MudChip>
+        </MudStack>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+            Saving here replaces your standing pattern for this week only. To be unavailable for the whole
+            week, request time off instead.
+        </MudAlert>
+
+        <AvailabilityEditor Windows="weekEdits" WeekStart="weekStart" Disabled="saving || weekLoading" />
+
+        @foreach (var error in weekErrors)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@error</MudAlert>
+        }
+
+        <MudStack Row="true" Class="mt-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="saving || weekLoading"
+                       OnClick="SaveWeekAsync">Save for this week</MudButton>
+            <MudButton Variant="Variant.Text" Disabled="saving || weekLoading"
+                       OnClick="LoadWeekAsync">Reset</MudButton>
+            @if (weekSource == AvailabilitySource.Custom)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" Disabled="saving || weekLoading"
+                           OnClick="RevertWeekAsync">Revert to standing pattern</MudButton>
+            }
+        </MudStack>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private string? userId;
+
+    private List<WindowEdit> standing = [];
+    private List<string> standingErrors = [];
+
+    private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+    private List<WindowEdit> weekEdits = [];
+    private List<string> weekErrors = [];
+    private AvailabilitySource weekSource = AvailabilitySource.None;
+
+    private bool saving;
+    private bool weekLoading;
+
+    private string SourceText => weekSource switch
+    {
+        AvailabilitySource.Custom => "Custom for this week",
+        AvailabilitySource.Standing => "Using your standing pattern",
+        _ => "Nothing set"
+    };
+
+    private Color SourceColor => weekSource switch
+    {
+        AvailabilitySource.Custom => Color.Info,
+        AvailabilitySource.Standing => Color.Default,
+        _ => Color.Warning
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        await LoadStandingAsync();
+        await LoadWeekAsync();
+    }
+
+    private async Task LoadStandingAsync()
+    {
+        standingErrors = [];
+
+        if (userId is null)
+        {
+            standing = [];
+            return;
+        }
+
+        standing = WindowEdit.FromWindows(await AvailabilityService.GetStandingAsync(userId));
+    }
+
+    private async Task LoadWeekAsync()
+    {
+        weekErrors = [];
+
+        if (userId is null)
+        {
+            weekEdits = [];
+            return;
+        }
+
+        weekLoading = true;
+        var effective = await AvailabilityService.GetEffectiveAsync(userId, weekStart);
+        weekEdits = WindowEdit.FromWindows(effective.Windows);
+        weekSource = effective.Source;
+        weekLoading = false;
+    }
+
+    private async Task ChangeWeekAsync(int days)
+    {
+        weekStart = weekStart.AddDays(days);
+        await LoadWeekAsync();
+    }
+
+    private async Task GoToThisWeekAsync()
+    {
+        weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+        await LoadWeekAsync();
+    }
+
+    private async Task SaveStandingAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        standingErrors = [];
+
+        if (!WindowEdit.TryToWindows(standing, out var windows))
+        {
+            standingErrors = ["Please fill in both times for every window."];
+            return;
+        }
+
+        saving = true;
+        var result = await AvailabilityService.SaveStandingAsync(userId, windows);
+        saving = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add("Standing pattern saved.", Severity.Success);
+            await LoadStandingAsync();
+            await LoadWeekAsync();
+        }
+        else
+        {
+            standingErrors = result.Errors.ToList();
+            Snackbar.Add("Could not save. See the errors above the buttons.", Severity.Error);
+        }
+    }
+
+    private async Task SaveWeekAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        weekErrors = [];
+
+        if (!WindowEdit.TryToWindows(weekEdits, out var windows))
+        {
+            weekErrors = ["Please fill in both times for every window."];
+            return;
+        }
+
+        saving = true;
+        var result = await AvailabilityService.SaveWeekOverrideAsync(userId, weekStart, windows);
+        saving = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add(
+                windows.Count == 0 ? "Reverted to your standing pattern." : "Saved for this week.",
+                Severity.Success);
+            await LoadWeekAsync();
+        }
+        else
+        {
+            weekErrors = result.Errors.ToList();
+            Snackbar.Add("Could not save. See the errors above the buttons.", Severity.Error);
+        }
+    }
+
+    private async Task RevertWeekAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        saving = true;
+        var result = await AvailabilityService.SaveWeekOverrideAsync(userId, weekStart, []);
+        saving = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add("Reverted to your standing pattern.", Severity.Success);
+            await LoadWeekAsync();
+        }
+        else
+        {
+            weekErrors = result.Errors.ToList();
+        }
+    }
+}

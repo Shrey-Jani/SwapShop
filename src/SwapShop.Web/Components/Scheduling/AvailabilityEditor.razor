@@ -1,0 +1,72 @@
+@foreach (var day in DaysInOrder)
+{
+    var dayWindows = Windows.Where(w => w.Day == day).ToList();
+
+    <MudPaper Class="pa-3 mb-2" Outlined="true">
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.subtitle1"><strong>@DayLabel(day)</strong></MudText>
+                <MudSpacer />
+                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Add"
+                           Disabled="Disabled" OnClick="() => AddWindow(day)">
+                    Add window
+                </MudButton>
+            </MudStack>
+
+            @if (dayWindows.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Unavailable all day</MudText>
+            }
+
+            @foreach (var window in dayWindows)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudTimePicker Label="Start" @bind-Time="window.Start" />
+                    <MudTimePicker Label="End" @bind-Time="window.End" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   Disabled="Disabled" OnClick="() => RemoveWindow(window)" />
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public List<WindowEdit> Windows { get; set; } = [];
+
+    [Parameter]
+    public DateOnly? WeekStart { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private static readonly DayOfWeek[] DaysInOrder =
+    [
+        DayOfWeek.Monday,
+        DayOfWeek.Tuesday,
+        DayOfWeek.Wednesday,
+        DayOfWeek.Thursday,
+        DayOfWeek.Friday,
+        DayOfWeek.Saturday,
+        DayOfWeek.Sunday
+    ];
+
+    private string DayLabel(DayOfWeek day)
+    {
+        if (WeekStart is null)
+        {
+            return day.ToString();
+        }
+
+        var offset = ((int)day + 6) % 7;
+        var date = WeekStart.Value.AddDays(offset);
+
+        return $"{day}, {date:MMM d}";
+    }
+
+    private void AddWindow(DayOfWeek day) =>
+        Windows.Add(new WindowEdit { Day = day, Start = new TimeSpan(9, 0, 0), End = new TimeSpan(17, 0, 0) });
+
+    private void RemoveWindow(WindowEdit window) => Windows.Remove(window);
+}

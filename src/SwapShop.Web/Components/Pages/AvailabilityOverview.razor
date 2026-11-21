@@ -1,0 +1,138 @@
+@page "/manager/availability"
+
+@using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Enums
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+@using SwapShop.Core.Utilities
+
+@attribute [Authorize(Roles = Roles.Manager)]
+
+@inject IAvailabilityService AvailabilityService
+
+<PageTitle>Availability overview</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Availability overview</MudText>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="loading"
+                   OnClick="() => ChangeWeekAsync(-7)" />
+    <MudText Typo="Typo.h6">@weekStart.ToString("MMM d") – @weekStart.AddDays(6).ToString("MMM d, yyyy")</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="loading"
+                   OnClick="() => ChangeWeekAsync(7)" />
+    <MudButton Variant="Variant.Text" Disabled="loading" OnClick="GoToThisWeekAsync">This week</MudButton>
+</MudStack>
+
+@if (NotSetCount > 0)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+        @NotSetCount employee(s) have not set any availability, so the scheduler will not warn about their shifts.
+    </MudAlert>
+}
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Class="mb-2" />
+}
+
+<div style="overflow-x: auto;">
+    <MudSimpleTable Dense="true" Bordered="true">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Source</th>
+                @foreach (var day in Days)
+                {
+                    <th>@day.ToString("ddd d")</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var employee in overview)
+            {
+                <tr>
+                    <td><strong>@employee.EmployeeName</strong></td>
+                    <td>
+                        <MudChip T="string" Size="Size.Small" Color="@SourceColor(employee.Source)">
+                            @SourceText(employee.Source)
+                        </MudChip>
+                    </td>
+                    @foreach (var day in Days)
+                    {
+                        var text = DayText(employee, day.DayOfWeek);
+
+                        <td>
+                            @if (text is null)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @(employee.Source == AvailabilitySource.None ? "not set" : "unavailable")
+                                </MudText>
+                            }
+                            else
+                            {
+                                @text
+                            }
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</div>
+
+@code {
+    private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+    private IReadOnlyList<EmployeeWeekAvailability> overview = [];
+    private bool loading = true;
+
+    private IEnumerable<DateOnly> Days => Enumerable.Range(0, 7).Select(i => weekStart.AddDays(i));
+
+    private int NotSetCount => overview.Count(e => e.Source == AvailabilitySource.None);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        overview = await AvailabilityService.GetOverviewAsync(weekStart);
+        loading = false;
+    }
+
+    private async Task ChangeWeekAsync(int days)
+    {
+        weekStart = weekStart.AddDays(days);
+        await LoadAsync();
+    }
+
+    private async Task GoToThisWeekAsync()
+    {
+        weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+        await LoadAsync();
+    }
+
+    private static string? DayText(EmployeeWeekAvailability employee, DayOfWeek day)
+    {
+        var windows = employee.Windows
+            .Where(w => w.Day == day)
+            .OrderBy(w => w.Start)
+            .ToList();
+
+        return windows.Count == 0
+            ? null
+            : string.Join(", ", windows.Select(w => $"{w.Start:HH:mm}–{w.End:HH:mm}"));
+    }
+
+    private static string SourceText(AvailabilitySource source) => source switch
+    {
+        AvailabilitySource.Custom => "Custom week",
+        AvailabilitySource.Standing => "Standing",
+        _ => "Not set"
+    };
+
+    private static Color SourceColor(AvailabilitySource source) => source switch
+    {
+        AvailabilitySource.Custom => Color.Info,
+        AvailabilitySource.Standing => Color.Default,
+        _ => Color.Warning
+    };
+}
