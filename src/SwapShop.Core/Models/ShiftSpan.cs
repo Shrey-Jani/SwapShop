@@ -14,4 +14,6 @@ public record ShiftSpan(DateTime Start, DateTime End)
 
         return new ShiftSpan(start, end);
     }
+
+    public bool Overlaps(ShiftSpan other) => Start < other.End && End > other.Start;
 }
