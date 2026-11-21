@@ -5,28 +5,21 @@ namespace SwapShop.Core.Rules;
 public static class TimeOffRules
 {
     public static IReadOnlyList<string> Validate(
-        DateOnly start,
-        DateOnly end,
+        DateOnly date,
         DateOnly today,
         IEnumerable<DateRange> existingActiveRequests)
     {
         var errors = new List<string>();
 
-        if (end < start)
+        if (date < today)
         {
-            errors.Add("The last day off cannot be before the first day off.");
-            return errors;
+            errors.Add("Time off cannot be requested for a day in the past.");
         }
 
-        if (start < today)
-        {
-            errors.Add("Time off cannot start in the past.");
-        }
-
-        var requested = new DateRange(start, end);
+        var requested = new DateRange(date, date);
         if (existingActiveRequests.Any(r => r.Overlaps(requested)))
         {
-            errors.Add("This overlaps another pending or approved time-off request.");
+            errors.Add("You already have a pending or approved time-off request for this day.");
         }
 
         return errors;

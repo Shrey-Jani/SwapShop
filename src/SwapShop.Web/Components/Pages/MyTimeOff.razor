@@ -17,21 +17,22 @@
 
 <MudText Typo="Typo.h4" GutterBottom="true">My time off</MudText>
 
-<MudPaper Class="pa-4 mb-4" Outlined="true">
-    <MudText Typo="Typo.h6" GutterBottom="true">Request time off</MudText>
+<MudPaper Class="pa-4 mb-4" Outlined="true" Style="max-width: 520px;">
+    <MudText Typo="Typo.h6" GutterBottom="true">Request a day off</MudText>
 
     <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
         A request that covers a shift starting within the next 24 hours is marked Short notice and shown as
         urgent to your manager. Please also contact your manager directly.
     </MudAlert>
 
-    <MudStack Spacing="2">
-        <MudStack Row="true" Spacing="2">
-            <MudDatePicker Label="First day off" @bind-Date="startDate" MinDate="@DateTime.Today" />
-            <MudDatePicker Label="Last day off" @bind-Date="endDate" MinDate="@(startDate ?? DateTime.Today)" />
-        </MudStack>
+    <MudStack Spacing="3">
+        <MudDatePicker Label="Day off" @bind-Date="day" MinDate="@DateTime.Today" />
 
         <MudTextField @bind-Value="reason" Label="Reason (optional)" Lines="2" MaxLength="500" />
+
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            One request covers one day. For several days, send one request for each day.
+        </MudText>
 
         @foreach (var error in errors)
         {
@@ -47,16 +48,14 @@
 
 <MudTable Items="requests" Loading="loading" Hover="true" Striped="true" Dense="true">
     <HeaderContent>
-        <MudTh>Dates</MudTh>
-        <MudTh>Days</MudTh>
+        <MudTh>Day off</MudTh>
         <MudTh>Reason</MudTh>
         <MudTh>Status</MudTh>
         <MudTh>Requested</MudTh>
         <MudTh></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Dates">@DatesText(context)</MudTd>
-        <MudTd DataLabel="Days">@context.Days</MudTd>
+        <MudTd DataLabel="Day off">@DatesText(context)</MudTd>
         <MudTd DataLabel="Reason">@context.Reason</MudTd>
         <MudTd DataLabel="Status">
             <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
@@ -88,8 +87,7 @@
     private bool loading = true;
     private bool saving;
 
-    private DateTime? startDate;
-    private DateTime? endDate;
+    private DateTime? day;
     private string? reason;
 
     protected override async Task OnInitializedAsync()
@@ -122,16 +120,15 @@
 
         errors = [];
 
-        if (startDate is null || endDate is null)
+        if (day is null)
         {
-            errors = ["Please choose the first and the last day off."];
+            errors = ["Please choose the day off."];
             return;
         }
 
         var model = new TimeOffFormModel
         {
-            StartDate = DateOnly.FromDateTime(startDate.Value),
-            EndDate = DateOnly.FromDateTime(endDate.Value),
+            Date = DateOnly.FromDateTime(day.Value),
             Reason = reason
         };
 
@@ -142,8 +139,7 @@
         if (result.Succeeded)
         {
             Snackbar.Add("Time-off request sent.", Severity.Success);
-            startDate = null;
-            endDate = null;
+            day = null;
             reason = null;
             await LoadAsync();
         }
@@ -189,7 +185,7 @@
 
     private static string DatesText(TimeOffRequestDto request) =>
         request.StartDate == request.EndDate
-            ? request.StartDate.ToString("MMM d, yyyy")
+            ? request.StartDate.ToString("ddd, MMM d, yyyy")
             : $"{request.StartDate:MMM d, yyyy} – {request.EndDate:MMM d, yyyy}";
 
     private static Color StatusColor(TimeOffStatus status) => status switch

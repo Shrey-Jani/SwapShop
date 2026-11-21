@@ -117,14 +117,14 @@ public class TimeOffService(IDbContextFactory<ApplicationDbContext> dbFactory, T
             .Select(r => new DateRange(r.StartDate, r.EndDate))
             .ToListAsync();
 
-        var errors = TimeOffRules.Validate(model.StartDate, model.EndDate, today, existing);
+        var errors = TimeOffRules.Validate(model.Date, today, existing);
         if (errors.Count > 0)
         {
             return ServiceResult.Failure(errors);
         }
 
-        var earliestShiftDate = model.StartDate.AddDays(-1);
-        var latestShiftDate = model.EndDate < today.AddDays(1) ? model.EndDate : today.AddDays(1);
+        var earliestShiftDate = model.Date.AddDays(-1);
+        var latestShiftDate = model.Date < today.AddDays(1) ? model.Date : today.AddDays(1);
 
         var nearbyShifts = await db.Shifts
             .AsNoTracking()
@@ -140,11 +140,11 @@ public class TimeOffService(IDbContextFactory<ApplicationDbContext> dbFactory, T
         db.TimeOffRequests.Add(new TimeOffRequest
         {
             UserId = userId,
-            StartDate = model.StartDate,
-            EndDate = model.EndDate,
+            StartDate = model.Date,
+            EndDate = model.Date,
             Reason = string.IsNullOrWhiteSpace(model.Reason) ? null : model.Reason.Trim(),
             Status = TimeOffStatus.Pending,
-            IsShortNotice = TimeOffRules.IsShortNotice(spans, model.StartDate, model.EndDate, now),
+            IsShortNotice = TimeOffRules.IsShortNotice(spans, model.Date, model.Date, now),
             RequestedAtUtc = timeProvider.GetUtcNow().UtcDateTime
         });
 

@@ -9,6 +9,8 @@
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle1"><strong>@ShiftText</strong></MudText>
 
+            <MudText>Day off: <strong>@Shift.Date.ToString("dddd, MMM d, yyyy")</strong></MudText>
+
             <MudAlert Severity="Severity.Info" Dense="true">
                 If this shift starts within the next 24 hours, your request is marked Short notice and shown as
                 urgent to your manager. Please also contact your manager directly.
@@ -18,11 +20,6 @@
             {
                 <MudAlert Severity="Severity.Error" Dense="true">@error</MudAlert>
             }
-
-            <MudStack Row="true" Spacing="2">
-                <MudDatePicker Label="First day off" Date="firstDay" Disabled="true" />
-                <MudDatePicker Label="Last day off" @bind-Date="lastDay" MinDate="firstDay" />
-            </MudStack>
 
             <MudTextField @bind-Value="reason" Label="Reason (optional)" Lines="2" MaxLength="500" />
         </MudStack>
@@ -44,20 +41,12 @@
     [Parameter, EditorRequired]
     public string UserId { get; set; } = string.Empty;
 
-    private DateTime? firstDay;
-    private DateTime? lastDay;
     private string? reason;
     private List<string> errors = [];
     private bool saving;
 
     private string ShiftText =>
-        $"{Shift.Date:dddd, MMM d} · {Shift.StartTime:HH:mm} to {Shift.EndTime:HH:mm} · {Shift.Position}";
-
-    protected override void OnInitialized()
-    {
-        firstDay = Shift.Date.ToDateTime(TimeOnly.MinValue);
-        lastDay = firstDay;
-    }
+        $"{Shift.StartTime:HH:mm} to {Shift.EndTime:HH:mm} · {Shift.Position}";
 
     private void Cancel() => MudDialog.Cancel();
 
@@ -65,16 +54,9 @@
     {
         errors = [];
 
-        if (lastDay is null)
-        {
-            errors = ["Please choose the last day off."];
-            return;
-        }
-
         var model = new TimeOffFormModel
         {
-            StartDate = Shift.Date,
-            EndDate = DateOnly.FromDateTime(lastDay.Value),
+            Date = Shift.Date,
             Reason = reason
         };
 

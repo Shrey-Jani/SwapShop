@@ -28,7 +28,6 @@
             <HeaderContent>
                 <MudTh>Employee</MudTh>
                 <MudTh>Dates</MudTh>
-                <MudTh>Days</MudTh>
                 <MudTh>Reason</MudTh>
                 <MudTh>Flags</MudTh>
                 <MudTh>Requested</MudTh>
@@ -37,7 +36,6 @@
             <RowTemplate>
                 <MudTd DataLabel="Employee"><strong>@context.EmployeeName</strong></MudTd>
                 <MudTd DataLabel="Dates">@DatesText(context)</MudTd>
-                <MudTd DataLabel="Days">@context.Days</MudTd>
                 <MudTd DataLabel="Reason">@context.Reason</MudTd>
                 <MudTd DataLabel="Flags">
                     @if (context.IsShortNotice)
@@ -70,14 +68,12 @@
             <HeaderContent>
                 <MudTh>Employee</MudTh>
                 <MudTh>Dates</MudTh>
-                <MudTh>Days</MudTh>
                 <MudTh>Status</MudTh>
                 <MudTh>Reviewed</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Employee"><strong>@context.EmployeeName</strong></MudTd>
                 <MudTd DataLabel="Dates">@DatesText(context)</MudTd>
-                <MudTd DataLabel="Days">@context.Days</MudTd>
                 <MudTd DataLabel="Status">
                     <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
                     @if (context.IsShortNotice)
