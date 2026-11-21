@@ -2,6 +2,7 @@
 
 @using Position = SwapShop.Core.Enums.Position
 @using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Enums
 @using SwapShop.Core.Models
 @using SwapShop.Core.Services
 @using SwapShop.Core.Utilities
@@ -11,6 +12,7 @@
 
 @inject IShiftService ShiftService
 @inject IEmployeeService EmployeeService
+@inject IConflictService ConflictService
 @inject IDialogService DialogService
 
 @inject ISnackbar Snackbar
@@ -42,6 +44,19 @@
     <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
         @DraftCount draft shift(s) this week are hidden from staff until you publish the week.
         Outlined chips are drafts, solid green chips are published.
+    </MudAlert>
+}
+
+@if (conflicts.Count > 0)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+        <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+            <span>@conflicts.Count shift(s) have conflicts. Hover a shift to see why.</span>
+            @foreach (var type in Enum.GetValues<ConflictType>().Where(t => CountWith(t) > 0))
+            {
+                <span><MudIcon Icon="@IconFor(type)" Size="Size.Small" /> @TypeText(type, CountWith(type))</span>
+            }
+        </MudStack>
     </MudAlert>
 }
 
@@ -90,6 +105,7 @@
 
     private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
     private IReadOnlyList<ShiftDto> shifts = [];
+    private IReadOnlyDictionary<int, IReadOnlyList<Conflict>> conflicts = new Dictionary<int, IReadOnlyList<Conflict>>();
     private List<GridRow> rows = [];
     private bool loading = true;
 
@@ -103,6 +119,7 @@
 
         var employees = await EmployeeService.GetAllAsync(includeInactive: false);
         shifts = await ShiftService.GetWeekAsync(weekStart);
+        conflicts = await ConflictService.GetWeekConflictsAsync(weekStart);
 
         rows = employees
             .Select(e => new GridRow(e.Id, e.FullName, e.Position))
@@ -135,14 +152,52 @@
     private IEnumerable<ShiftDto> ShiftsFor(string? userId, DateOnly day) =>
         shifts.Where(s => s.AssignedUserId == userId && s.Date == day);
 
+    private IEnumerable<ConflictType> ConflictTypesFor(ShiftDto shift) =>
+        conflicts.TryGetValue(shift.Id, out var list)
+            ? list.Select(c => c.Type).Distinct()
+            : [];
+
+    private int CountWith(ConflictType type) =>
+        conflicts.Values.Count(list => list.Any(c => c.Type == type));
+
+    private string ChipTitle(ShiftDto shift) =>
+        conflicts.TryGetValue(shift.Id, out var list)
+            ? $"{shift.Position}" + string.Concat(list.Select(c => $"{Environment.NewLine}{TypeLabel(c.Type)}: {c.Message}"))
+            : shift.Position.ToString();
+
+    private static string IconFor(ConflictType type) => type switch
+    {
+        ConflictType.Overlap => Icons.Material.Filled.Layers,
+        ConflictType.OutsideAvailability => Icons.Material.Filled.EventBusy,
+        _ => Icons.Material.Filled.BeachAccess
+    };
+
+    private static string TypeLabel(ConflictType type) => type switch
+    {
+        ConflictType.Overlap => "Overlap",
+        ConflictType.OutsideAvailability => "Availability",
+        _ => "Time off"
+    };
+
+    private static string TypeText(ConflictType type, int count) => type switch
+    {
+        ConflictType.Overlap => $"{count} overlapping another shift",
+        ConflictType.OutsideAvailability => $"{count} outside availability",
+        _ => $"{count} on approved time off"
+    };
+
     private RenderFragment Cell(string? userId, DateOnly day, Position? position) => @<div>
         @foreach (var shift in ShiftsFor(userId, day))
         {
             <MudChip T="string" Size="Size.Small"
                      Variant="@(shift.IsPublished ? Variant.Filled : Variant.Outlined)"
                      Color="@(shift.IsPublished ? Color.Success : Color.Default)"
-                     title="@shift.Position"
+                     title="@ChipTitle(shift)"
                      OnClick="() => EditAsync(shift.Id)">
+                @foreach (var type in ConflictTypesFor(shift))
+                {
+                    <MudIcon Icon="@IconFor(type)" Size="Size.Small" Color="Color.Warning" Class="mr-1" />
+                }
                 @shift.StartTime.ToString("HH:mm")–@shift.EndTime.ToString("HH:mm")
                 @if (userId is null)
                 {

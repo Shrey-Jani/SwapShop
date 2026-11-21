@@ -6,6 +6,7 @@
 @inject IEmployeeService EmployeeService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IConflictService ConflictService
 
 <EditForm Model="Model" OnValidSubmit="SaveAsync">
     <DataAnnotationsValidator />
@@ -15,6 +16,18 @@
                 @foreach (var error in errors)
                 {
                     <MudAlert Severity="Severity.Error" Dense="true">@error</MudAlert>
+                }
+
+                @if (ShowConflicts)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        <strong>This shift conflicts with the employee's schedule:</strong>
+                        @foreach (var conflict in conflicts)
+                        {
+                            <div>• @conflict.Message</div>
+                        }
+                        <div>Press "Save anyway" to keep it, or change the shift.</div>
+                    </MudAlert>
                 }
 
                 <MudDatePicker Label="Date" @bind-Date="DateValue" />
@@ -50,8 +63,9 @@
                 <MudSpacer />
             }
             <MudButton OnClick="Cancel">Cancel</MudButton>
-            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
-                       Disabled="busy">Save</MudButton>
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled"
+                       Color="@(ShowConflicts ? Color.Warning : Color.Primary)"
+                       Disabled="busy">@(ShowConflicts ? "Save anyway" : "Save")</MudButton>
         </DialogActions>
     </MudDialog>
 </EditForm>
@@ -65,9 +79,16 @@
 
     private IReadOnlyList<EmployeeDto> employees = [];
     private List<string> errors = [];
+    private List<Conflict> conflicts = [];
+    private string? warnedSignature;
     private bool busy;
 
     private bool IsNew => Model.Id is null;
+
+    private string Signature =>
+        $"{Model.Date:yyyy-MM-dd}|{Model.StartTime:HH:mm}|{Model.EndTime:HH:mm}|{Model.AssignedUserId}";
+
+    private bool ShowConflicts => conflicts.Count > 0 && warnedSignature == Signature;
 
     private DateTime? DateValue
     {
@@ -122,6 +143,22 @@
     {
         busy = true;
         errors = [];
+
+        if (warnedSignature != Signature)
+        {
+            var slot = new ShiftSlot(Model.Id, Model.Date, Model.StartTime, Model.EndTime);
+            var found = await ConflictService.CheckAsync(Model.AssignedUserId, slot);
+
+            if (found.Count > 0)
+            {
+                conflicts = found.ToList();
+                warnedSignature = Signature;
+                busy = false;
+                return;
+            }
+
+            conflicts = [];
+        }
 
         var result = await ShiftService.SaveAsync(Model);
 

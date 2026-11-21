@@ -1,0 +1,151 @@
+@page "/open-shifts"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using SwapShop.Core.Models
+@using SwapShop.Core.Services
+@using SwapShop.Core.Utilities
+
+@attribute [Authorize]
+
+@inject IOpenShiftService OpenShiftService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Open shifts</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Open shifts</MudText>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+    Published shifts for your position that nobody has taken yet. A shift that overlaps one of your shifts,
+    falls outside your availability, or lands on your approved time off cannot be taken.
+</MudAlert>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="loading || processing"
+                   OnClick="() => ChangeWeekAsync(-7)" />
+    <MudText Typo="Typo.h6">@weekStart.ToString("MMM d") – @weekStart.AddDays(6).ToString("MMM d, yyyy")</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="loading || processing"
+                   OnClick="() => ChangeWeekAsync(7)" />
+    <MudButton Variant="Variant.Text" Disabled="loading || processing"
+               OnClick="GoToThisWeekAsync">This week</MudButton>
+    <MudSpacer />
+    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
+               Disabled="loading || processing" OnClick="LoadAsync">Refresh</MudButton>
+</MudStack>
+
+<MudTable Items="items" Loading="loading" Hover="true" Striped="true" Dense="true">
+    <HeaderContent>
+        <MudTh>Day</MudTh>
+        <MudTh>Time</MudTh>
+        <MudTh>Position</MudTh>
+        <MudTh>Hours</MudTh>
+        <MudTh>Notes</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Day">@context.Shift.Date.ToString("dddd, MMM d")</MudTd>
+        <MudTd DataLabel="Time">@TimeText(context.Shift)</MudTd>
+        <MudTd DataLabel="Position">@context.Shift.Position</MudTd>
+        <MudTd DataLabel="Hours">@context.Shift.Duration.TotalHours.ToString("0.##")</MudTd>
+        <MudTd DataLabel="Notes">@context.Shift.Notes</MudTd>
+        <MudTd>
+            @if (context.CanTake)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                           Disabled="processing" OnClick="() => TakeAsync(context)">Take shift</MudButton>
+            }
+            else
+            {
+                @foreach (var conflict in context.Conflicts)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Warning">@conflict.Message</MudText>
+                }
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No open shifts for you this week.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private string? userId;
+    private DateOnly weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+    private IReadOnlyList<OpenShiftDto> items = [];
+    private bool loading = true;
+    private bool processing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (userId is null)
+        {
+            loading = false;
+            return;
+        }
+
+        loading = true;
+        items = await OpenShiftService.GetOpenShiftsAsync(userId, weekStart);
+        loading = false;
+    }
+
+    private async Task ChangeWeekAsync(int days)
+    {
+        weekStart = weekStart.AddDays(days);
+        await LoadAsync();
+    }
+
+    private async Task GoToThisWeekAsync()
+    {
+        weekStart = WeekHelper.StartOfWeek(DateOnly.FromDateTime(DateTime.Today));
+        await LoadAsync();
+    }
+
+    private async Task TakeAsync(OpenShiftDto item)
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        var shift = item.Shift;
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Take this shift?",
+            $"{shift.Date:dddd, MMM d} · {TimeText(shift)} · {shift.Position}. It will be added to your schedule.",
+            yesText: "Take shift",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        processing = true;
+        var result = await OpenShiftService.ClaimAsync(userId, shift.Id);
+        processing = false;
+
+        if (result.Succeeded)
+        {
+            Snackbar.Add("Shift added to your schedule.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(string.Join(" ", result.Errors), Severity.Error);
+        }
+
+        await LoadAsync();
+    }
+
+    private static string TimeText(ShiftDto shift) =>
+        $"{shift.StartTime:HH:mm} – {shift.EndTime:HH:mm}";
+}
