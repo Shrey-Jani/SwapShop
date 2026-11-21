@@ -5,7 +5,10 @@ namespace SwapShop.Core.Rules;
 
 public static class ConflictChecker
 {
-    public static IReadOnlyList<Conflict> Check(ShiftSlot shift, IEnumerable<ShiftSlot> otherShifts)
+    public static IReadOnlyList<Conflict> Check(
+        ShiftSlot shift,
+        IEnumerable<ShiftSlot> otherShifts,
+        IReadOnlyDictionary<DateOnly, WeekAvailability>? availabilityByWeek = null)
     {
         var span = shift.Span;
         var conflicts = new List<Conflict>();
@@ -24,6 +27,11 @@ public static class ConflictChecker
                     $"Overlaps another shift on {other.Date:ddd, MMM d} ({other.StartTime:HH:mm}–{other.EndTime:HH:mm}).",
                     other.Id));
             }
+        }
+
+        if (availabilityByWeek is not null)
+        {
+            conflicts.AddRange(AvailabilityCheck.Check(shift, availabilityByWeek));
         }
 
         return conflicts;
