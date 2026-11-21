@@ -32,7 +32,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(a => a.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(a => new { a.UserId, a.DayOfWeek });
+            entity.HasIndex(a => new { a.UserId, a.WeekStart, a.DayOfWeek });
         });
 
         builder.Entity<TimeOffRequest>(entity =>

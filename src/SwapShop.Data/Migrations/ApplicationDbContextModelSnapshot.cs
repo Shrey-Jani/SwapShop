@@ -185,9 +185,12 @@ namespace SwapShop.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateOnly?>("WeekStart")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "DayOfWeek");
+                    b.HasIndex("UserId", "WeekStart", "DayOfWeek");
 
                     b.ToTable("Availabilities");
                 });
