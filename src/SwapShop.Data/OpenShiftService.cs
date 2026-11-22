@@ -31,11 +31,14 @@ public class OpenShiftService(
             return [];
         }
 
+        var isManager = PositionRules.IsManager(employee.Position, await db.IsInManagerRoleAsync(userId));
+        var workable = PositionRules.WorkablePositions(employee.Position, isManager).ToArray();
+
         var shifts = await db.Shifts
             .AsNoTracking()
             .Where(s => s.AssignedUserId == null
                         && s.IsPublished
-                        && s.Position == employee.Position
+                        && workable.Contains(s.Position)
                         && s.Date >= week
                         && s.Date <= weekEnd)
             .OrderBy(s => s.Date)
@@ -76,7 +79,8 @@ public class OpenShiftService(
             return ServiceResult.Failure("This shift no longer exists.");
         }
 
-        var errors = OpenShiftRules.CanClaim(employee.IsActive, employee.Position, ToDto(shift), now);
+        var isManager = PositionRules.IsManager(employee.Position, await db.IsInManagerRoleAsync(userId));
+        var errors = OpenShiftRules.CanClaim(employee.IsActive, employee.Position, isManager, ToDto(shift), now);
         if (errors.Count > 0)
         {
             return ServiceResult.Failure(errors);

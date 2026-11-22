@@ -8,6 +8,7 @@ public static class OpenShiftRules
     public static IReadOnlyList<string> CanClaim(
         bool employeeIsActive,
         Position employeePosition,
+        bool employeeIsManager,
         ShiftDto shift,
         DateTime now)
     {
@@ -28,9 +29,9 @@ public static class OpenShiftRules
             errors.Add("This shift has already been taken.");
         }
 
-        if (shift.Position != employeePosition)
+        if (!PositionRules.CanWork(employeePosition, employeeIsManager, shift.Position))
         {
-            errors.Add("This shift is for a different position.");
+            errors.Add("This shift is for a position you cannot work.");
         }
 
         if (shift.Span.Start <= now)
